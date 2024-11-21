@@ -42,10 +42,13 @@ spec:
               jobSet:
                 description: JobSet provides configurations for jobset installation
                 properties:
-                  image:
+                  jobSetImage:
+                    type: string
+                  proxy:
                     type: string
                 required:
-                - image
+                - jobSetImage
+                - proxy
                 type: object
               kueue:
                 description: Kueue

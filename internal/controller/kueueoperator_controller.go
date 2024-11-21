@@ -18,6 +18,7 @@ package controller
 
 import (
 	"context"
+	"fmt"
 
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -75,16 +76,7 @@ func (r *KueueOperatorReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 
 	// Check for JobSet
 	if kueueOperator.Spec.JobSet != nil {
-		deployment, err := install.BuildJobSetDeployment(kueueOperator.Spec.JobSet)
-		if err != nil {
-			log.Error(err, "Failed to build jobset deployment")
-			return ctrl.Result{}, err
-		}
-		log.Info("Creating a jobset deployment")
-		if err := r.Create(ctx, deployment, &client.CreateOptions{}); err != nil {
-			log.Error(err, "Failed to create deployment")
-		}
-
+		r.installJobSet(ctx, kueueOperator.Spec.JobSet)
 	}
 
 	// Check for Kueue
@@ -92,6 +84,36 @@ func (r *KueueOperatorReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 
 	}
 	return ctrl.Result{}, nil
+}
+
+func (r *KueueOperatorReconciler) installJobSet(ctx context.Context, jobSetSpec *cachev1.JobSetSpec) error {
+	// read deploy and create on cluster
+	deployment, err := install.BuildJobSetDeployment(jobSetSpec)
+	if err != nil {
+		return fmt.Errorf("failed to build jobset deployment: %v", err)
+	}
+	if err := r.Create(ctx, deployment, &client.CreateOptions{}); err != nil {
+		return fmt.Errorf("failed to create deployment: %w", err)
+	}
+
+	// read serviceAccounts and create on cluster
+	serviceAccount, err := install.BuildServiceAccount("../../assets/jobset/service_account.yaml")
+	if err != nil {
+		return fmt.Errorf("failed to build service account: %v", err)
+	}
+	if err := r.Create(ctx, serviceAccount, &client.CreateOptions{}); err != nil {
+		return fmt.Errorf("failed to create service account: %w", err)
+	}
+
+	// read secret and create on cluster
+	secrets, err := install.BuildSecrets("../../assets/jobset/secrets.yaml")
+	if err != nil {
+		return fmt.Errorf("failed to build secrets: %v", err)
+	}
+	if err := r.Create(ctx, secrets, &client.CreateOptions{}); err != nil {
+		return fmt.Errorf("failed to create secrets %w", err)
+	}
+	return nil
 }
 
 // SetupWithManager sets up the controller with the Manager.

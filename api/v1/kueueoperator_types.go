@@ -44,7 +44,7 @@ type KueueOperatorStatus struct {
 
 type JobSetSpec struct {
 	JobSetImage string `json:"jobSetImage"`
-	Proxy       string `json:proxy"`
+	Proxy       string `json:"proxy"`
 }
 
 type LeaderWorkerSet struct {

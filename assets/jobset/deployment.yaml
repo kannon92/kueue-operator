@@ -10,7 +10,6 @@ metadata:
     app.kubernetes.io/part-of: jobset
     control-plane: controller-manager
   name: jobset-controller-manager
-  namespace: openshift-jobset-system
 spec:
   replicas: 1
   selector:
