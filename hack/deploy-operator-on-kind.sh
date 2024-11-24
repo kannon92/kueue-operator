@@ -6,7 +6,7 @@ KIND=${KIND:-kind}
 KUBECTL=${KUBECTL:-kubectl}
 KIND_NAME=${KIND_NAME:-"kind-e2e"}
 KIND_CONTEXT=kind-${KIND_NAME}
-NAMESPACE=${NAMESPACE:-"kueue-operator-system"}
+NAMESPACE=${NAMESPACE:-"jobset-system"}
 KIND_NODE_NAME=${KIND_NODE_NAME:-"kind-e2e-control-plane"}
 WEBHOOK_TIMEOUT=${WEBHOOK_TIMEOUT:-2m}
 

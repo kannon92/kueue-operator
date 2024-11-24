@@ -1,0 +1,12 @@
+apiVersion: cache.kannon92/v1
+kind: KueueOperator
+metadata:
+  labels:
+    app.kubernetes.io/name: kueue-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: kueueoperator-sample
+  namespace: jobset-system
+spec:
+  jobSet:
+    jobSetImage: registry.k8s.io/jobset/jobset:v0.7.1
+    proxy: gcr.io/kubebuilder/kube-rbac-proxy:v0.13.1

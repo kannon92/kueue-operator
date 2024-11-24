@@ -9,8 +9,8 @@ import (
 	"k8s.io/client-go/kubernetes/scheme"
 )
 
-func BuildJobSetDeployment(jobSetSpec *v1.JobSetSpec) (*appsv1.Deployment, error) {
-	jobSetDeployment := "../../assets/jobset/deployment.yaml"
+func ReadJobSetDeployment(jobSetSpec *v1.JobSetSpec, path, namespace string) (*appsv1.Deployment, error) {
+	jobSetDeployment := path
 	decode := scheme.Codecs.UniversalDeserializer().Decode
 	stream, err := os.ReadFile(jobSetDeployment)
 	if err != nil {
@@ -18,7 +18,7 @@ func BuildJobSetDeployment(jobSetSpec *v1.JobSetSpec) (*appsv1.Deployment, error
 	}
 	obj, gKV, _ := decode(stream, nil, nil)
 	if gKV.Kind != "Deployment" {
-		return obj.(*appsv1.Deployment), nil
+		return nil, fmt.Errorf("unable to decode deployment")
 	}
 
 	deployment := obj.(*appsv1.Deployment)
@@ -30,5 +30,6 @@ func BuildJobSetDeployment(jobSetSpec *v1.JobSetSpec) (*appsv1.Deployment, error
 			deployment.Spec.Template.Spec.Containers[i].Image = jobSetSpec.Proxy
 		}
 	}
+	deployment.ObjectMeta.Namespace = namespace
 	return deployment, nil
 }

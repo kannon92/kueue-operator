@@ -24,9 +24,8 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/log"
+	logr "sigs.k8s.io/controller-runtime/pkg/log"
 
-	"github.com/go-logr/logr"
 	cachev1 "github.com/kannon92/kueue-operator/api/v1"
 	"github.com/kannon92/kueue-operator/internal/install"
 )
@@ -34,16 +33,26 @@ import (
 // KueueOperatorReconciler reconciles a KueueOperator object
 type KueueOperatorReconciler struct {
 	client.Client
-	Log    logr.Logger
 	Scheme *runtime.Scheme
+	hack   bool
 }
 
 //+kubebuilder:rbac:groups=cache.kannon92,resources=kueueoperators,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=cache.kannon92,resources=kueueoperators/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=cache.kannon92,resources=kueueoperators/finalizers,verbs=update
-//+kubebuilder:rbac:groups=cache.kannon92,resources=deployments,verbs=get;list;create;update;patch;delete
-//+kubebuilder:rbac:groups=core,resources=secrets,verbs=create
-//+kubebuilder:rbac:groups=core,resources=deployments,verbs=get;list;create;update;patch;delete
+//+kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;create;update;patch;delete
+//+kubebuilder:rbac:groups=core,resources=secrets,verbs=create;delete
+//+kubebuilder:rbac:groups=core,resources=serviceaccounts,verbs=create;delete
+//+kubebuilder:rbac:groups="",resources=events,verbs=create;watch;update;patch
+//+kubebuilder:rbac:groups=jobset.x-k8s.io,resources=jobsets,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=jobset.x-k8s.io,resources=jobsets/status,verbs=get;update;patch
+//+kubebuilder:rbac:groups=jobset.x-k8s.io,resources=jobsets/finalizers,verbs=update
+//+kubebuilder:rbac:groups=batch,resources=jobs,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=batch,resources=jobs/status,verbs=get;patch;update
+//+kubebuilder:rbac:groups=core,resources=services,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups="",resources=events,verbs=create;watch;update;patch
+// +kubebuilder:rbac:groups=core,resources=pods,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=core,resources=nodes,verbs=get;list;watch
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -55,10 +64,8 @@ type KueueOperatorReconciler struct {
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.17.3/pkg/reconcile
 func (r *KueueOperatorReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	_ = log.FromContext(ctx)
-
-	log := r.Log.WithValues("KueueOperator", req.NamespacedName)
-	// Fetch the Memcached instance
+	log := logr.FromContext(ctx)
+	// Fetch the KueueOperator instance
 	kueueOperator := &cachev1.KueueOperator{}
 	err := r.Get(ctx, req.NamespacedName, kueueOperator)
 	if err != nil {
@@ -74,9 +81,26 @@ func (r *KueueOperatorReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		return ctrl.Result{}, err
 	}
 
-	// Check for JobSet
-	if kueueOperator.Spec.JobSet != nil {
-		r.installJobSet(ctx, kueueOperator.Spec.JobSet)
+	if r.hack {
+		log.Info("TODO: no difference detected so skipping installation")
+		return ctrl.Result{}, nil
+	}
+	if kueueOperator.Status.JobSetVersion == "" {
+		r.hack = true
+		// Check for JobSet
+		if kueueOperator.Spec.JobSet != nil {
+			log.Info("Installing JobSetOperator")
+			err := r.installJobSet(ctx, kueueOperator.Spec.JobSet, req.Namespace)
+			if err != nil {
+				log.Error(err, "error detected when installing jobset")
+				return ctrl.Result{}, err
+			} else {
+				kueueOperator.Status.JobSetVersion = kueueOperator.Spec.JobSet.JobSetImage
+				if err := r.Status().Update(ctx, kueueOperator, &client.SubResourceUpdateOptions{}); err != nil {
+					return ctrl.Result{}, err
+				}
+			}
+		}
 	}
 
 	// Check for Kueue
@@ -86,33 +110,49 @@ func (r *KueueOperatorReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	return ctrl.Result{}, nil
 }
 
-func (r *KueueOperatorReconciler) installJobSet(ctx context.Context, jobSetSpec *cachev1.JobSetSpec) error {
-	// read deploy and create on cluster
-	deployment, err := install.BuildJobSetDeployment(jobSetSpec)
-	if err != nil {
-		return fmt.Errorf("failed to build jobset deployment: %v", err)
-	}
-	if err := r.Create(ctx, deployment, &client.CreateOptions{}); err != nil {
-		return fmt.Errorf("failed to create deployment: %w", err)
-	}
-
-	// read serviceAccounts and create on cluster
-	serviceAccount, err := install.BuildServiceAccount("../../assets/jobset/service_account.yaml")
-	if err != nil {
-		return fmt.Errorf("failed to build service account: %v", err)
-	}
-	if err := r.Create(ctx, serviceAccount, &client.CreateOptions{}); err != nil {
-		return fmt.Errorf("failed to create service account: %w", err)
-	}
+func (r *KueueOperatorReconciler) installJobSet(ctx context.Context, jobSetSpec *cachev1.JobSetSpec, namespace string) error {
+	log := logr.FromContext(ctx)
 
 	// read secret and create on cluster
-	secrets, err := install.BuildSecrets("../../assets/jobset/secrets.yaml")
+	secrets, err := install.ReadSecret("assets/jobset/secret.yaml", namespace)
 	if err != nil {
-		return fmt.Errorf("failed to build secrets: %v", err)
+		return fmt.Errorf("failed to read secrets: %v", err)
 	}
 	if err := r.Create(ctx, secrets, &client.CreateOptions{}); err != nil {
 		return fmt.Errorf("failed to create secrets %w", err)
 	}
+	log.Info("created jobset secret")
+
+	// read service metrics and create on cluster
+	serviceMetrics, err := install.ReadService("assets/jobset/service_metrics.yaml", namespace)
+	if err != nil {
+		return fmt.Errorf("failed to read service: %v", err)
+	}
+	if err := r.Create(ctx, serviceMetrics, &client.CreateOptions{}); err != nil {
+		return fmt.Errorf("failed to create service %w", err)
+	}
+	log.Info("created jobset service metrics")
+
+	// read service metrics and create on cluster
+	serviceWebhook, err := install.ReadService("assets/jobset/service_webhook.yaml", namespace)
+	if err != nil {
+		return fmt.Errorf("failed to read service webhook: %v", err)
+	}
+	if err := r.Create(ctx, serviceWebhook, &client.CreateOptions{}); err != nil {
+		return fmt.Errorf("failed to create service webhook %w", err)
+	}
+	log.Info("created jobset service webhook")
+
+	// read deploy and create on cluster
+	deployment, err := install.ReadJobSetDeployment(jobSetSpec, "assets/jobset/deployment.yaml", namespace)
+	if err != nil {
+		return fmt.Errorf("failed to read jobset deployment: %v", err)
+	}
+	if err := r.Create(ctx, deployment, &client.CreateOptions{}); err != nil {
+		return fmt.Errorf("failed to create deployment: %w", err)
+	}
+	log.Info("all jobset components are installed")
+
 	return nil
 }
 

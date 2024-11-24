@@ -22,3 +22,9 @@ resources:
 # if you do not want those helpers be installed with your Project.
 - kueueoperator_editor_role.yaml
 - kueueoperator_viewer_role.yaml
+# JobSet RBAC
+- jobset-leader-election-role.yaml
+- jobset-manager-cluster-role.yaml
+- jobset-manager-rolebinding.yaml
+- jobset-proxy-rolebinding.yaml
+- jobset-role-binding.yaml

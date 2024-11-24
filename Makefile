@@ -124,15 +124,18 @@ test: manifests generate fmt vet envtest ## Run tests.
 test-e2e:
 	go test ./test/e2e/ -v -ginkgo.v
 
+.PHONY: prep-kind-cluster
+prep-kind-cluster: export IMG_TAG=test-e2e
+prep-kind-cluster: export KIND_NAME=kind-e2e
+prep-kind-cluster: export KIND_CONTEXT=kind-kind-e2e
+prep-kind-cluster: export KIND_NODE_NAME=${KIND_NAME}-control-plane
+prep-kind-cluster: export CONTAINER_TOOL=docker
+prep-kind-cluster: docker-build create-kind-cluster deploy-operator-on-kind
+
 .PHONY: test-e2e-kind
-test-e2e-kind: export IMG_TAG=test-e2e
-test-e2e-kind: export KIND_NAME=kind-e2e
-test-e2e-kind: export KIND_CONTEXT=kind-kind-e2e
-test-e2e-kind: export KIND_NODE_NAME=${KIND_NAME}-control-plane
-test-e2e-kind: export CONTAINER_TOOL=docker
-test-e2e-kind: docker-build create-kind-cluster deploy-operator-on-kind
+test-e2e-kind: prep-kind-cluster
 	export KIND=$(KIND) KUBECTL=$(KUBECTL) IMG=$(IMG) && \
-		go test ./test/e2e ./test/e2e/
+go test ./test/e2e ./test/e2e/
 
 .PHONY: cleanup-test-e2e-kind
 cleanup-test-e2e-kind: KIND_NAME=kind-e2e
@@ -228,7 +231,7 @@ uninstall: manifests kustomize ## Uninstall CRDs from the K8s cluster specified 
 .PHONY: deploy
 deploy: manifests kustomize ## Deploy controller to the K8s cluster specified in ~/.kube/config.
 	cd config/manager && $(KUSTOMIZE) edit set image controller=${IMG}
-	$(KUSTOMIZE) build config/default | $(KUBECTL) apply --server-side -f -
+	$(KUSTOMIZE) build config/default | $(KUBECTL) apply --force-conflicts --server-side -f -
 
 .PHONY: undeploy
 undeploy: kustomize ## Undeploy controller from the K8s cluster specified in ~/.kube/config. Call with ignore-not-found=true to ignore resource not found errors during deletion.

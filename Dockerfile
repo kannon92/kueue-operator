@@ -1,5 +1,5 @@
 # Build the manager binary
-FROM golang:1.21 AS builder
+FROM golang:1.23 AS builder
 ARG TARGETOS
 ARG TARGETARCH
 
@@ -17,6 +17,10 @@ COPY api/ api/
 COPY internal/controller/ internal/controller/
 COPY internal/install/ internal/install/
 
+# Copy the asserts
+COPY assets/jobset/ assets/jobset/
+COPY assets/kueue/ assets/kueue/
+
 # Build
 # the GOARCH has not a default value to allow the binary be built according to the host where the command
 # was called. For example, if we call make docker-build in a local env which has the Apple Silicon M1 SO
@@ -29,6 +33,9 @@ RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -a -o ma
 FROM gcr.io/distroless/static:nonroot
 WORKDIR /
 COPY --from=builder /workspace/manager .
+COPY --from=builder /workspace/assets/jobset assets/jobset/.
+COPY --from=builder /workspace/assets/kueue assets/kueue/.
+
 USER 65532:65532
 
 ENTRYPOINT ["/manager"]

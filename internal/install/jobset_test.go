@@ -8,10 +8,13 @@ import (
 
 func TestBuildJobSetDeployment(t *testing.T) {
 
-	got, err := BuildJobSetDeployment(&v1.JobSetSpec{JobSetImage: "testMe", Proxy: "proxyTest"})
+	got, err := ReadJobSetDeployment(&v1.JobSetSpec{JobSetImage: "testMe", Proxy: "proxyTest"}, "../../assets/jobset/deployment.yaml", "test")
 
 	if err != nil {
 		t.Errorf("error unexpected %s", err)
+	}
+	if got.Namespace != "test" {
+		t.Errorf("should have gotten test namespace but got %s", got.Namespace)
 	}
 	for _, val := range got.Spec.Template.Spec.Containers {
 		if val.Name == "manager" {

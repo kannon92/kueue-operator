@@ -105,7 +105,7 @@ spec:
             - ALL
       securityContext:
         runAsNonRoot: true
-      serviceAccountName: jobset-controller-manager
+      serviceAccountName: kueue-operator-controller-manager
       terminationGracePeriodSeconds: 10
       volumes:
       - name: cert
