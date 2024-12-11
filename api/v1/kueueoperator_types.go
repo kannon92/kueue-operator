@@ -18,6 +18,7 @@ package v1
 
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	configapi "sigs.k8s.io/kueue/apis/config/v1beta1"
 )
 
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
@@ -27,32 +28,19 @@ import (
 type KueueOperatorSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
-
-	// JobSet provides configurations for jobset installation
-	JobSet *JobSetSpec `json:"jobSet,omitempty"`
-	// LeaderWorkSet provides configurations for LeaderWorkerSet installation
-	LeaderWorkerSet *LeaderWorkerSet `json:"leaderWorkerSet,omitempty"`
-	// Kueue
 	Kueue *Kueue `json:"kueue,omitempty"`
+}
+
+type Kueue struct {
+	// The namespace where kueue is deployed
+	KueueNamespace string `json:"kueueNamespace"`
+	// The config that is persisted to a config map
+	Config configapi.Configuration `json:"config"`
 }
 
 // KueueOperatorStatus defines the observed state of KueueOperator
 type KueueOperatorStatus struct {
-	JobSetVersion string `json:"jobSetVersion"`
-	KueueVersion  string `json:"kueueVersion"`
-}
-
-type JobSetSpec struct {
-	JobSetImage string `json:"jobSetImage"`
-	Proxy       string `json:"proxy"`
-}
-
-type LeaderWorkerSet struct {
-	Image string `json:"image"`
-}
-
-type Kueue struct {
-	Image string `json:"image"`
+	KueueVersion string `json:"kueueVersion"`
 }
 
 //+kubebuilder:object:root=true

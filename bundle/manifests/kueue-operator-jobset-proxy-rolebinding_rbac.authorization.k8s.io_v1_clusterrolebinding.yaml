@@ -1,19 +1,20 @@
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
+  creationTimestamp: null
   labels:
-    app.kubernetes.io/component: rbac
+    app.kubernetes.io/component: kube-rbac-proxy
     app.kubernetes.io/created-by: jobset
-    app.kubernetes.io/instance: manager-rolebinding
+    app.kubernetes.io/instance: proxy-rolebinding
     app.kubernetes.io/managed-by: kustomize
     app.kubernetes.io/name: clusterrolebinding
     app.kubernetes.io/part-of: jobset
-  name: jobset-manager-rolebinding
+  name: kueue-operator-jobset-proxy-rolebinding
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
-  name: jobset-manager-role
+  name: jobset-proxy-role
 subjects:
 - kind: ServiceAccount
-  name: controller-manager
-  namespace: system
+  name: kueue-operator-controller-manager
+  namespace: jobset-system

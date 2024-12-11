@@ -18,41 +18,32 @@ package controller
 
 import (
 	"context"
-	"fmt"
 
+	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logr "sigs.k8s.io/controller-runtime/pkg/log"
 
 	cachev1 "github.com/kannon92/kueue-operator/api/v1"
-	"github.com/kannon92/kueue-operator/internal/install"
+	"github.com/kannon92/kueue-operator/internal/configmap"
 )
 
 // KueueOperatorReconciler reconciles a KueueOperator object
 type KueueOperatorReconciler struct {
 	client.Client
-	Scheme *runtime.Scheme
-	hack   bool
+	Scheme         *runtime.Scheme
+	kueueNamespace string
 }
 
 //+kubebuilder:rbac:groups=cache.kannon92,resources=kueueoperators,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=cache.kannon92,resources=kueueoperators/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=cache.kannon92,resources=kueueoperators/finalizers,verbs=update
-//+kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;create;update;patch;delete
-//+kubebuilder:rbac:groups=core,resources=secrets,verbs=create;delete
-//+kubebuilder:rbac:groups=core,resources=serviceaccounts,verbs=create;delete
-//+kubebuilder:rbac:groups="",resources=events,verbs=create;watch;update;patch
-//+kubebuilder:rbac:groups=jobset.x-k8s.io,resources=jobsets,verbs=get;list;watch;create;update;patch;delete
-//+kubebuilder:rbac:groups=jobset.x-k8s.io,resources=jobsets/status,verbs=get;update;patch
-//+kubebuilder:rbac:groups=jobset.x-k8s.io,resources=jobsets/finalizers,verbs=update
-//+kubebuilder:rbac:groups=batch,resources=jobs,verbs=get;list;watch;create;update;patch;delete
-//+kubebuilder:rbac:groups=batch,resources=jobs/status,verbs=get;patch;update
-//+kubebuilder:rbac:groups=core,resources=services,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups="",resources=events,verbs=create;watch;update;patch
-// +kubebuilder:rbac:groups=core,resources=pods,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=core,resources=nodes,verbs=get;list;watch
+//+kubebuilder:rbac:groups=core,resources=configmaps,verbs=get;list;create;update;patch;delete
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -81,78 +72,84 @@ func (r *KueueOperatorReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		return ctrl.Result{}, err
 	}
 
-	if r.hack {
-		log.Info("TODO: no difference detected so skipping installation")
+	if kueueOperator.Spec.Kueue == nil {
 		return ctrl.Result{}, nil
 	}
-	if kueueOperator.Status.JobSetVersion == "" {
-		r.hack = true
-		// Check for JobSet
-		if kueueOperator.Spec.JobSet != nil {
-			log.Info("Installing JobSetOperator")
-			err := r.installJobSet(ctx, kueueOperator.Spec.JobSet, req.Namespace)
-			if err != nil {
-				log.Error(err, "error detected when installing jobset")
-				return ctrl.Result{}, err
-			} else {
-				kueueOperator.Status.JobSetVersion = kueueOperator.Spec.JobSet.JobSetImage
-				if err := r.Status().Update(ctx, kueueOperator, &client.SubResourceUpdateOptions{}); err != nil {
-					return ctrl.Result{}, err
-				}
-			}
-		}
+
+	// Reconcile differences of config maps
+	configMap, cfgMapErr := r.fetchConfigMap(ctx)
+	if cfgMapErr != nil {
+		return ctrl.Result{}, cfgMapErr
+	}
+	if !configmap.IsConfigMapDifferentFromConfiguration(configMap, kueueOperator.Spec.Kueue) {
+		log.V(4).Info("Kueue config maps are the same. skipping")
+		return ctrl.Result{}, nil
+	}
+	// scale down kueue deployment
+	if downScaleErr := r.scaleDeployment(ctx, 0); downScaleErr != nil {
+		return ctrl.Result{}, downScaleErr
 	}
 
-	// Check for Kueue
-	if kueueOperator.Spec.Kueue != nil {
-
+	// set new config map
+	newCfgMap := configmap.BuildConfigMap(&kueueOperator.Spec.Kueue.Config)
+	if cfgMapErr := r.updateConfigMap(ctx, newCfgMap); cfgMapErr != nil {
+		return ctrl.Result{}, cfgMapErr
 	}
+	// scale up kueue deployment
+	if upScaleErr := r.scaleDeployment(ctx, 1); upScaleErr != nil {
+		return ctrl.Result{}, upScaleErr
+	}
+
 	return ctrl.Result{}, nil
 }
 
-func (r *KueueOperatorReconciler) installJobSet(ctx context.Context, jobSetSpec *cachev1.JobSetSpec, namespace string) error {
+func (r *KueueOperatorReconciler) fetchConfigMap(ctx context.Context) (*corev1.ConfigMap, error) {
 	log := logr.FromContext(ctx)
+	configMap := &corev1.ConfigMap{}
+	configMapErr := r.Get(ctx, types.NamespacedName{Name: "kueue-manager-config", Namespace: r.kueueNamespace}, configMap)
+	if configMapErr != nil {
+		if errors.IsNotFound(configMapErr) {
+			log.Info("Kueue Config map not found. Ignoring")
+			return nil, nil
+		}
+		log.Error(configMapErr, "Failed to get config map from kueue")
+		return nil, configMapErr
+	}
+	return configMap, nil
+}
 
-	// read secret and create on cluster
-	secrets, err := install.ReadSecret("assets/jobset/secret.yaml", namespace)
-	if err != nil {
-		return fmt.Errorf("failed to read secrets: %v", err)
+func (r *KueueOperatorReconciler) updateConfigMap(ctx context.Context, newCfgMap *corev1.ConfigMap) error {
+	log := logr.FromContext(ctx)
+	configMap := &corev1.ConfigMap{}
+	configMapErr := r.Get(ctx, types.NamespacedName{Name: "kueue-manager-config", Namespace: r.kueueNamespace}, configMap)
+	if configMapErr != nil {
+		if errors.IsNotFound(configMapErr) {
+			log.Info("Kueue Config map not found. Ignoring")
+			return nil
+		}
+		log.Error(configMapErr, "Failed to get config map from kueue")
+		return configMapErr
 	}
-	if err := r.Create(ctx, secrets, &client.CreateOptions{}); err != nil {
-		return fmt.Errorf("failed to create secrets %w", err)
-	}
-	log.Info("created jobset secret")
+	configMap = newCfgMap
+	return r.Update(ctx, configMap, &client.UpdateOptions{})
+}
 
-	// read service metrics and create on cluster
-	serviceMetrics, err := install.ReadService("assets/jobset/service_metrics.yaml", namespace)
-	if err != nil {
-		return fmt.Errorf("failed to read service: %v", err)
+func (r *KueueOperatorReconciler) scaleDeployment(ctx context.Context, replicas int32) error {
+	log := logr.FromContext(ctx)
+	deployment := &appsv1.Deployment{}
+	deploymentErr := r.Get(ctx, types.NamespacedName{Name: "kueue-controller-manager", Namespace: r.kueueNamespace}, deployment)
+	if deploymentErr != nil {
+		if errors.IsNotFound(deploymentErr) {
+			log.Info("Kueue Deployment not found. Ignoring")
+			return nil
+		}
+		log.Error(deploymentErr, "Failed to get deployment from kueue namespace")
+		return deploymentErr
 	}
-	if err := r.Create(ctx, serviceMetrics, &client.CreateOptions{}); err != nil {
-		return fmt.Errorf("failed to create service %w", err)
+	deployment.Spec.Replicas = ptr.To(replicas)
+	if uErr := r.Update(ctx, deployment, &client.UpdateOptions{}); uErr != nil {
+		log.Error(uErr, "Unable to update deployment")
 	}
-	log.Info("created jobset service metrics")
-
-	// read service metrics and create on cluster
-	serviceWebhook, err := install.ReadService("assets/jobset/service_webhook.yaml", namespace)
-	if err != nil {
-		return fmt.Errorf("failed to read service webhook: %v", err)
-	}
-	if err := r.Create(ctx, serviceWebhook, &client.CreateOptions{}); err != nil {
-		return fmt.Errorf("failed to create service webhook %w", err)
-	}
-	log.Info("created jobset service webhook")
-
-	// read deploy and create on cluster
-	deployment, err := install.ReadJobSetDeployment(jobSetSpec, "assets/jobset/deployment.yaml", namespace)
-	if err != nil {
-		return fmt.Errorf("failed to read jobset deployment: %v", err)
-	}
-	if err := r.Create(ctx, deployment, &client.CreateOptions{}); err != nil {
-		return fmt.Errorf("failed to create deployment: %w", err)
-	}
-	log.Info("all jobset components are installed")
-
 	return nil
 }
 

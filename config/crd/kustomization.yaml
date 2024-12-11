@@ -3,8 +3,6 @@
 # It should be run by config/default
 resources:
 - bases/cache.kannon92_kueueoperators.yaml
-- bases/jobset.yaml
-- bases/kueue.yaml
 #+kubebuilder:scaffold:crdkustomizeresource
 
 patches:

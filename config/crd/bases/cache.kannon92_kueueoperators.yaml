@@ -3,7 +3,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.14.0
+    controller-gen.kubebuilder.io/version: v0.16.5
   name: kueueoperators.cache.kannon92
 spec:
   group: cache.kannon92
@@ -39,44 +39,588 @@ spec:
           spec:
             description: KueueOperatorSpec defines the desired state of KueueOperator
             properties:
-              jobSet:
-                description: JobSet provides configurations for jobset installation
-                properties:
-                  jobSetImage:
-                    type: string
-                  proxy:
-                    type: string
-                required:
-                - jobSetImage
-                - proxy
-                type: object
               kueue:
-                description: Kueue
+                description: |-
+                  INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
+                  Important: Run "make" to regenerate code after modifying this file
                 properties:
-                  image:
-                    type: string
+                  config:
+                    description: Configuration is the Schema for the kueueconfigurations
+                      API
+                    properties:
+                      apiVersion:
+                        description: |-
+                          APIVersion defines the versioned schema of this representation of an object.
+                          Servers should convert recognized schemas to the latest internal value, and
+                          may reject unrecognized values.
+                          More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+                        type: string
+                      clientConnection:
+                        description: |-
+                          ClientConnection provides additional configuration options for Kubernetes
+                          API server client.
+                        properties:
+                          burst:
+                            description: Burst allows extra queries to accumulate
+                              when a client is exceeding its rate.
+                            format: int32
+                            type: integer
+                          qps:
+                            description: |-
+                              QPS controls the number of queries per second allowed for K8S api server
+                              connection.
+                            type: number
+                        type: object
+                      controller:
+                        description: |-
+                          Controller contains global configuration options for controllers
+                          registered within this manager.
+                        properties:
+                          cacheSyncTimeout:
+                            description: |-
+                              CacheSyncTimeout refers to the time limit set to wait for syncing caches.
+                              Defaults to 2 minutes if not set.
+                            format: int64
+                            type: integer
+                          groupKindConcurrency:
+                            additionalProperties:
+                              type: integer
+                            description: |-
+                              GroupKindConcurrency is a map from a Kind to the number of concurrent reconciliation
+                              allowed for that controller.
+
+                              When a controller is registered within this manager using the builder utilities,
+                              users have to specify the type the controller reconciles in the For(...) call.
+                              If the object's kind passed matches one of the keys in this map, the concurrency
+                              for that controller is set to the number specified.
+
+                              The key is expected to be consistent in form with GroupKind.String(),
+                              e.g. ReplicaSet in apps group (regardless of version) would be `ReplicaSet.apps`.
+                            type: object
+                        type: object
+                      fairSharing:
+                        description: FairSharing controls the fair sharing semantics
+                          across the cluster.
+                        properties:
+                          enable:
+                            description: |-
+                              enable indicates whether to enable fair sharing for all cohorts.
+                              Defaults to false.
+                            type: boolean
+                          preemptionStrategies:
+                            description: |-
+                              preemptionStrategies indicates which constraints should a preemption satisfy.
+                              The preemption algorithm will only use the next strategy in the list if the
+                              incoming workload (preemptor) doesn't fit after using the previous strategies.
+                              Possible values are:
+                              - LessThanOrEqualToFinalShare: Only preempt a workload if the share of the preemptor CQ
+                                with the preemptor workload is less than or equal to the share of the preemptee CQ
+                                without the workload to be preempted.
+                                This strategy might favor preemption of smaller workloads in the preemptee CQ,
+                                regardless of priority or start time, in an effort to keep the share of the CQ
+                                as high as possible.
+                              - LessThanInitialShare: Only preempt a workload if the share of the preemptor CQ
+                                with the incoming workload is strictly less than the share of the preemptee CQ.
+                                This strategy doesn't depend on the share usage of the workload being preempted.
+                                As a result, the strategy chooses to preempt workloads with the lowest priority and
+                                newest start time first.
+                              The default strategy is ["LessThanOrEqualToFinalShare", "LessThanInitialShare"].
+                            items:
+                              type: string
+                            type: array
+                        required:
+                        - enable
+                        type: object
+                      health:
+                        description: Health contains the controller health configuration
+                        properties:
+                          healthProbeBindAddress:
+                            description: |-
+                              HealthProbeBindAddress is the TCP address that the controller should bind to
+                              for serving health probes
+                              It can be set to "0" or "" to disable serving the health probe.
+                            type: string
+                          livenessEndpointName:
+                            description: LivenessEndpointName, defaults to "healthz"
+                            type: string
+                          readinessEndpointName:
+                            description: ReadinessEndpointName, defaults to "readyz"
+                            type: string
+                        type: object
+                      integrations:
+                        description: |-
+                          Integrations provide configuration options for AI/ML/Batch frameworks
+                          integrations (including K8S job).
+                        properties:
+                          externalFrameworks:
+                            description: |-
+                              List of GroupVersionKinds that are managed for Kueue by external controllers;
+                              the expected format is `Kind.version.group.com`.
+                            items:
+                              type: string
+                            type: array
+                          frameworks:
+                            description: |-
+                              List of framework names to be enabled.
+                              Possible options:
+                               - "batch/job"
+                               - "kubeflow.org/mpijob"
+                               - "ray.io/rayjob"
+                               - "ray.io/raycluster"
+                               - "jobset.x-k8s.io/jobset"
+                               - "kubeflow.org/mxjob"
+                               - "kubeflow.org/paddlejob"
+                               - "kubeflow.org/pytorchjob"
+                               - "kubeflow.org/tfjob"
+                               - "kubeflow.org/xgboostjob"
+                               - "pod"
+                               - "deployment" (requires enabling pod integration)
+                               - "statefulset" (requires enabling pod integration)
+                            items:
+                              type: string
+                            type: array
+                          labelKeysToCopy:
+                            description: |-
+                              labelKeysToCopy is a list of label keys that should be copied from the job into the
+                              workload object. It is not required for the job to have all the labels from this
+                              list. If a job does not have some label with the given key from this list, the
+                              constructed workload object will be created without this label. In the case
+                              of creating a workload from a composable job (pod group), if multiple objects
+                              have labels with some key from the list, the values of these labels must
+                              match or otherwise the workload creation would fail. The labels are copied only
+                              during the workload creation and are not updated even if the labels of the
+                              underlying job are changed.
+                            items:
+                              type: string
+                            type: array
+                          podOptions:
+                            description: PodOptions defines kueue controller behaviour
+                              for pod objects
+                            properties:
+                              namespaceSelector:
+                                description: NamespaceSelector can be used to omit
+                                  some namespaces from pod reconciliation
+                                properties:
+                                  matchExpressions:
+                                    description: matchExpressions is a list of label
+                                      selector requirements. The requirements are
+                                      ANDed.
+                                    items:
+                                      description: |-
+                                        A label selector requirement is a selector that contains values, a key, and an operator that
+                                        relates the key and values.
+                                      properties:
+                                        key:
+                                          description: key is the label key that the
+                                            selector applies to.
+                                          type: string
+                                        operator:
+                                          description: |-
+                                            operator represents a key's relationship to a set of values.
+                                            Valid operators are In, NotIn, Exists and DoesNotExist.
+                                          type: string
+                                        values:
+                                          description: |-
+                                            values is an array of string values. If the operator is In or NotIn,
+                                            the values array must be non-empty. If the operator is Exists or DoesNotExist,
+                                            the values array must be empty. This array is replaced during a strategic
+                                            merge patch.
+                                          items:
+                                            type: string
+                                          type: array
+                                          x-kubernetes-list-type: atomic
+                                      required:
+                                      - key
+                                      - operator
+                                      type: object
+                                    type: array
+                                    x-kubernetes-list-type: atomic
+                                  matchLabels:
+                                    additionalProperties:
+                                      type: string
+                                    description: |-
+                                      matchLabels is a map of {key,value} pairs. A single {key,value} in the matchLabels
+                                      map is equivalent to an element of matchExpressions, whose key field is "key", the
+                                      operator is "In", and the values array contains only "value". The requirements are ANDed.
+                                    type: object
+                                type: object
+                                x-kubernetes-map-type: atomic
+                              podSelector:
+                                description: PodSelector can be used to choose what
+                                  pods to reconcile
+                                properties:
+                                  matchExpressions:
+                                    description: matchExpressions is a list of label
+                                      selector requirements. The requirements are
+                                      ANDed.
+                                    items:
+                                      description: |-
+                                        A label selector requirement is a selector that contains values, a key, and an operator that
+                                        relates the key and values.
+                                      properties:
+                                        key:
+                                          description: key is the label key that the
+                                            selector applies to.
+                                          type: string
+                                        operator:
+                                          description: |-
+                                            operator represents a key's relationship to a set of values.
+                                            Valid operators are In, NotIn, Exists and DoesNotExist.
+                                          type: string
+                                        values:
+                                          description: |-
+                                            values is an array of string values. If the operator is In or NotIn,
+                                            the values array must be non-empty. If the operator is Exists or DoesNotExist,
+                                            the values array must be empty. This array is replaced during a strategic
+                                            merge patch.
+                                          items:
+                                            type: string
+                                          type: array
+                                          x-kubernetes-list-type: atomic
+                                      required:
+                                      - key
+                                      - operator
+                                      type: object
+                                    type: array
+                                    x-kubernetes-list-type: atomic
+                                  matchLabels:
+                                    additionalProperties:
+                                      type: string
+                                    description: |-
+                                      matchLabels is a map of {key,value} pairs. A single {key,value} in the matchLabels
+                                      map is equivalent to an element of matchExpressions, whose key field is "key", the
+                                      operator is "In", and the values array contains only "value". The requirements are ANDed.
+                                    type: object
+                                type: object
+                                x-kubernetes-map-type: atomic
+                            type: object
+                        type: object
+                      internalCertManagement:
+                        description: InternalCertManagement is configuration for internalCertManagement
+                        properties:
+                          enable:
+                            description: |-
+                              Enable controls whether to enable internal cert management or not.
+                              Defaults to true. If you want to use a third-party management, e.g. cert-manager,
+                              set it to false. See the user guide for more information.
+                            type: boolean
+                          webhookSecretName:
+                            description: |-
+                              WebhookSecretName is the name of the Secret used to store CA and server certs.
+                              Defaults to kueue-webhook-server-cert.
+                            type: string
+                          webhookServiceName:
+                            description: |-
+                              WebhookServiceName is the name of the Service used as part of the DNSName.
+                              Defaults to kueue-webhook-service.
+                            type: string
+                        type: object
+                      kind:
+                        description: |-
+                          Kind is a string value representing the REST resource this object represents.
+                          Servers may infer this from the endpoint the client submits requests to.
+                          Cannot be updated.
+                          In CamelCase.
+                          More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+                        type: string
+                      leaderElection:
+                        description: |-
+                          LeaderElection is the LeaderElection config to be used when configuring
+                          the manager.Manager leader election
+                        properties:
+                          leaderElect:
+                            description: |-
+                              leaderElect enables a leader election client to gain leadership
+                              before executing the main loop. Enable this when running replicated
+                              components for high availability.
+                            type: boolean
+                          leaseDuration:
+                            description: |-
+                              leaseDuration is the duration that non-leader candidates will wait
+                              after observing a leadership renewal until attempting to acquire
+                              leadership of a led but unrenewed leader slot. This is effectively the
+                              maximum duration that a leader can be stopped before it is replaced
+                              by another candidate. This is only applicable if leader election is
+                              enabled.
+                            type: string
+                          renewDeadline:
+                            description: |-
+                              renewDeadline is the interval between attempts by the acting master to
+                              renew a leadership slot before it stops leading. This must be less
+                              than or equal to the lease duration. This is only applicable if leader
+                              election is enabled.
+                            type: string
+                          resourceLock:
+                            description: |-
+                              resourceLock indicates the resource object type that will be used to lock
+                              during leader election cycles.
+                            type: string
+                          resourceName:
+                            description: |-
+                              resourceName indicates the name of resource object that will be used to lock
+                              during leader election cycles.
+                            type: string
+                          resourceNamespace:
+                            description: |-
+                              resourceName indicates the namespace of resource object that will be used to lock
+                              during leader election cycles.
+                            type: string
+                          retryPeriod:
+                            description: |-
+                              retryPeriod is the duration the clients should wait between attempting
+                              acquisition and renewal of a leadership. This is only applicable if
+                              leader election is enabled.
+                            type: string
+                        required:
+                        - leaderElect
+                        - leaseDuration
+                        - renewDeadline
+                        - resourceLock
+                        - resourceName
+                        - resourceNamespace
+                        - retryPeriod
+                        type: object
+                      manageJobsWithoutQueueName:
+                        description: |-
+                          ManageJobsWithoutQueueName controls whether or not Kueue reconciles
+                          jobs that don't set the annotation kueue.x-k8s.io/queue-name.
+                          If set to true, then those jobs will be suspended and never started unless
+                          they are assigned a queue and eventually admitted. This also applies to
+                          jobs created before starting the kueue controller.
+                          Defaults to false; therefore, those jobs are not managed and if they are created
+                          unsuspended, they will start immediately.
+                        type: boolean
+                      metrics:
+                        description: Metrics contains the controller metrics configuration
+                        properties:
+                          bindAddress:
+                            description: |-
+                              BindAddress is the TCP address that the controller should bind to
+                              for serving prometheus metrics.
+                              It can be set to "0" to disable the metrics serving.
+                            type: string
+                          enableClusterQueueResources:
+                            description: |-
+                              EnableClusterQueueResources, if true the cluster queue resource usage and quotas
+                              metrics will be reported.
+                            type: boolean
+                        type: object
+                      multiKueue:
+                        description: MultiKueue controls the behaviour of the MultiKueue
+                          AdmissionCheck Controller.
+                        properties:
+                          gcInterval:
+                            description: |-
+                              GCInterval defines the time interval between two consecutive garbage collection runs.
+                              Defaults to 1min. If 0, the garbage collection is disabled.
+                            type: string
+                          origin:
+                            description: |-
+                              Origin defines a label value used to track the creator of workloads in the worker
+                              clusters.
+                              This is used by multikueue in components like its garbage collector to identify
+                              remote objects that ware created by this multikueue manager cluster and delete
+                              them if their local counterpart no longer exists.
+                            type: string
+                          workerLostTimeout:
+                            description: |-
+                              WorkerLostTimeout defines the time a local workload's multikueue admission check state is kept Ready
+                              if the connection with its reserving worker cluster is lost.
+
+                              Defaults to 15 minutes.
+                            type: string
+                        type: object
+                      namespace:
+                        description: |-
+                          Namespace is the namespace in which kueue is deployed. It is used as part of DNSName of the webhook Service.
+                          If not set, the value is set from the file /var/run/secrets/kubernetes.io/serviceaccount/namespace
+                          If the file doesn't exist, default value is kueue-system.
+                        type: string
+                      pprofBindAddress:
+                        description: |-
+                          PprofBindAddress is the TCP address that the controller should bind to
+                          for serving pprof.
+                          It can be set to "" or "0" to disable the pprof serving.
+                          Since pprof may contain sensitive information, make sure to protect it
+                          before exposing it to public.
+                        type: string
+                      queueVisibility:
+                        description: |-
+                          QueueVisibility is configuration to expose the information about the top
+                          pending workloads.
+                          Deprecated: This field will be removed on v1beta2, use VisibilityOnDemand
+                          (https://kueue.sigs.k8s.io/docs/tasks/manage/monitor_pending_workloads/pending_workloads_on_demand/)
+                          instead.
+                        properties:
+                          clusterQueues:
+                            description: |-
+                              ClusterQueues is configuration to expose the information
+                              about the top pending workloads in the cluster queue.
+                            properties:
+                              maxCount:
+                                description: |-
+                                  MaxCount indicates the maximal number of pending workloads exposed in the
+                                  cluster queue status.  When the value is set to 0, then ClusterQueue
+                                  visibility updates are disabled.
+                                  The maximal value is 4000.
+                                  Defaults to 10.
+                                format: int32
+                                type: integer
+                            type: object
+                          updateIntervalSeconds:
+                            description: |-
+                              UpdateIntervalSeconds specifies the time interval for updates to the structure
+                              of the top pending workloads in the queues.
+                              The minimum value is 1.
+                              Defaults to 5.
+                            format: int32
+                            type: integer
+                        type: object
+                      resources:
+                        description: Resources provides additional configuration options
+                          for handling the resources.
+                        properties:
+                          excludeResourcePrefixes:
+                            description: ExcludedResourcePrefixes defines which resources
+                              should be ignored by Kueue
+                            items:
+                              type: string
+                            type: array
+                          transformations:
+                            description: |-
+                              Transformations defines how to transform PodSpec resources into Workload resource requests.
+                              This is intended to be a map with Input as the key (enforced by validation code)
+                            items:
+                              properties:
+                                input:
+                                  description: Input is the name of the input resource.
+                                  type: string
+                                outputs:
+                                  additionalProperties:
+                                    anyOf:
+                                    - type: integer
+                                    - type: string
+                                    pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                    x-kubernetes-int-or-string: true
+                                  description: |-
+                                    Outputs specifies the output resources and quantities per unit of input resource.
+                                    An empty Outputs combined with a `Replace` Strategy causes the Input resource to be ignored by Kueue.
+                                  type: object
+                                strategy:
+                                  description: |-
+                                    Strategy specifies if the input resource should be replaced or retained.
+                                    Defaults to Retain
+                                  type: string
+                              required:
+                              - input
+                              type: object
+                            type: array
+                        type: object
+                      waitForPodsReady:
+                        description: |-
+                          WaitForPodsReady is configuration to provide a time-based all-or-nothing
+                          scheduling semantics for Jobs, by ensuring all pods are ready (running
+                          and passing the readiness probe) within the specified time. If the timeout
+                          is exceeded, then the workload is evicted.
+                        properties:
+                          blockAdmission:
+                            description: |-
+                              BlockAdmission when true, cluster queue will block admissions for all
+                              subsequent jobs until the jobs reach the PodsReady=true condition.
+                              This setting is only honored when `Enable` is set to true.
+                            type: boolean
+                          enable:
+                            description: |-
+                              Enable indicates whether to enable wait for pods ready feature.
+                              Defaults to false.
+                            type: boolean
+                          requeuingStrategy:
+                            description: RequeuingStrategy defines the strategy for
+                              requeuing a Workload.
+                            properties:
+                              backoffBaseSeconds:
+                                description: |-
+                                  BackoffBaseSeconds defines the base for the exponential backoff for
+                                  re-queuing an evicted workload.
+
+                                  Defaults to 60.
+                                format: int32
+                                type: integer
+                              backoffLimitCount:
+                                description: |-
+                                  BackoffLimitCount defines the maximum number of re-queuing retries.
+                                  Once the number is reached, the workload is deactivated (`.spec.activate`=`false`).
+                                  When it is null, the workloads will repeatedly and endless re-queueing.
+
+                                  Every backoff duration is about "b*2^(n-1)+Rand" where:
+                                  - "b" represents the base set by "BackoffBaseSeconds" parameter,
+                                  - "n" represents the "workloadStatus.requeueState.count",
+                                  - "Rand" represents the random jitter.
+                                  During this time, the workload is taken as an inadmissible and
+                                  other workloads will have a chance to be admitted.
+                                  By default, the consecutive requeue delays are around: (60s, 120s, 240s, ...).
+
+                                  Defaults to null.
+                                format: int32
+                                type: integer
+                              backoffMaxSeconds:
+                                description: |-
+                                  BackoffMaxSeconds defines the maximum backoff time to re-queue an evicted workload.
+
+                                  Defaults to 3600.
+                                format: int32
+                                type: integer
+                              timestamp:
+                                description: |-
+                                  Timestamp defines the timestamp used for re-queuing a Workload
+                                  that was evicted due to Pod readiness. The possible values are:
+
+                                  - `Eviction` (default) indicates from Workload `Evicted` condition with `PodsReadyTimeout` reason.
+                                  - `Creation` indicates from Workload .metadata.creationTimestamp.
+                                type: string
+                            type: object
+                          timeout:
+                            description: |-
+                              Timeout defines the time for an admitted workload to reach the
+                              PodsReady=true condition. When the timeout is exceeded, the workload
+                              evicted and requeued in the same cluster queue.
+                              Defaults to 5min.
+                            type: string
+                        type: object
+                      webhook:
+                        description: Webhook contains the controllers webhook configuration
+                        properties:
+                          certDir:
+                            description: |-
+                              CertDir is the directory that contains the server key and certificate.
+                              if not set, webhook server would look up the server key and certificate in
+                              {TempDir}/k8s-webhook-server/serving-certs. The server key and certificate
+                              must be named tls.key and tls.crt, respectively.
+                            type: string
+                          host:
+                            description: |-
+                              Host is the hostname that the webhook server binds to.
+                              It is used to set webhook.Server.Host.
+                            type: string
+                          port:
+                            description: |-
+                              Port is the port that the webhook server serves at.
+                              It is used to set webhook.Server.Port.
+                            type: integer
+                        type: object
+                    required:
+                    - manageJobsWithoutQueueName
+                    type: object
                 required:
-                - image
-                type: object
-              leaderWorkerSet:
-                description: LeaderWorkSet provides configurations for LeaderWorkerSet
-                  installation
-                properties:
-                  image:
-                    type: string
-                required:
-                - image
+                - config
                 type: object
             type: object
           status:
             description: KueueOperatorStatus defines the observed state of KueueOperator
             properties:
-              jobSetVersion:
-                type: string
               kueueVersion:
                 type: string
             required:
-            - jobSetVersion
             - kueueVersion
             type: object
         type: object
