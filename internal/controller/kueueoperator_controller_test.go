@@ -21,11 +21,10 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/kueue/apis/config/v1beta1"
 
 	cachev1 "github.com/kannon92/kueue-operator/api/v1"
 )
@@ -38,23 +37,29 @@ var _ = Describe("KueueOperator Controller", func() {
 
 		typeNamespacedName := types.NamespacedName{
 			Name:      resourceName,
-			Namespace: "default", // TODO(user):Modify as needed
+			Namespace: "openshift-kueue", // TODO(user):Modify as needed
 		}
-		kueueoperator := &cachev1.KueueOperator{}
 
 		BeforeEach(func() {
 			By("creating the custom resource for the Kind KueueOperator")
-			err := k8sClient.Get(ctx, typeNamespacedName, kueueoperator)
-			if err != nil && errors.IsNotFound(err) {
-				resource := &cachev1.KueueOperator{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      resourceName,
-						Namespace: "default",
+			resource := &cachev1.KueueOperator{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: "openshift-kueue",
+					Name:      "kueue",
+				},
+				Spec: cachev1.KueueOperatorSpec{
+					Kueue: &cachev1.Kueue{
+						Namespace: "openshift-kueue",
+						Config: cachev1.KueueConfiguration{
+							Integrations: v1beta1.Integrations{
+								Frameworks: []string{"batchv1.job"},
+							},
+						},
+						Image: "registry.k8s.io/kueue/kueue:v0.10.0",
 					},
-					// TODO(user): Specify other spec details if needed.
-				}
-				Expect(k8sClient.Create(ctx, resource)).To(Succeed())
+				},
 			}
+			Expect(k8sClient.Create(ctx, resource)).To(Succeed())
 		})
 
 		AfterEach(func() {

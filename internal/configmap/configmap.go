@@ -18,19 +18,61 @@ package configmap
 
 import (
 	corev1 "k8s.io/api/core/v1"
+	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/utils/ptr"
+	"sigs.k8s.io/yaml"
 
 	configapi "sigs.k8s.io/kueue/apis/config/v1beta1"
 
 	cachev1 "github.com/kannon92/kueue-operator/api/v1"
 )
 
-func BuildConfigMap(cfgMap *configapi.Configuration) *corev1.ConfigMap {
-	if cfgMap == nil {
-		return nil
+func BuildConfigMap(namespace string, kueueCfg cachev1.KueueConfiguration) (*corev1.ConfigMap, error) {
+	config := defaultKueueConfigurationTemplate(kueueCfg)
+	cfg, err := yaml.Marshal(config)
+	if err != nil {
+		return nil, err
 	}
-	return nil
+	cfgMap := &corev1.ConfigMap{
+		ObjectMeta: v1.ObjectMeta{
+			Name:      "kueue-manager-config",
+			Namespace: namespace,
+		},
+		Data: map[string]string{"controller_manager_config.yaml": string(cfg)},
+	}
+	return cfgMap, nil
 }
 
-func IsConfigMapDifferentFromConfiguration(kueueCfgMap *corev1.ConfigMap, kueueCfg *cachev1.Kueue) bool {
-	return true
+func defaultKueueConfigurationTemplate(kueueCfg cachev1.KueueConfiguration) *configapi.Configuration {
+	return &configapi.Configuration{
+		TypeMeta: v1.TypeMeta{
+			Kind:       "Configuration",
+			APIVersion: "config.kueue.x-k8s.io/v1beta1",
+		},
+		ControllerManager: configapi.ControllerManager{
+			Health: configapi.ControllerHealth{
+				HealthProbeBindAddress: ":8081",
+			},
+			Metrics: configapi.ControllerMetrics{
+				BindAddress:                 ":8080",
+				EnableClusterQueueResources: true,
+			},
+			Webhook: configapi.ControllerWebhook{
+				Port: ptr.To[int](9443),
+			},
+			Controller: &configapi.ControllerConfigurationSpec{
+				GroupKindConcurrency: map[string]int{
+					"Job.batch":                     5,
+					"Pod":                           5,
+					"Workload.kueue.x-k8s.io":       5,
+					"LocalQueue.kueue.x-k8s.io":     1,
+					"ClusterQueue.kueue.x-k8s.io":   1,
+					"ResourceFlavor.kueue.x-k8s.io": 1,
+				},
+			},
+		},
+		WaitForPodsReady:           kueueCfg.WaitForPodsReady,
+		ManageJobsWithoutQueueName: false,
+		Integrations:               &kueueCfg.Integrations,
+	}
 }

@@ -1,3 +1,0 @@
-resources:
-- jobset_mutatingwebhook.yaml
-- jobset_validatingwebhook.yaml

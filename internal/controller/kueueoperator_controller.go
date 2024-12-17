@@ -24,26 +24,31 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logr "sigs.k8s.io/controller-runtime/pkg/log"
 
 	cachev1 "github.com/kannon92/kueue-operator/api/v1"
 	"github.com/kannon92/kueue-operator/internal/configmap"
+	"github.com/kannon92/kueue-operator/internal/deployment"
+	"github.com/kannon92/kueue-operator/internal/secret"
+	"github.com/kannon92/kueue-operator/internal/service"
 )
 
 // KueueOperatorReconciler reconciles a KueueOperator object
 type KueueOperatorReconciler struct {
 	client.Client
-	Scheme         *runtime.Scheme
-	kueueNamespace string
+	Scheme *runtime.Scheme
 }
 
 //+kubebuilder:rbac:groups=cache.kannon92,resources=kueueoperators,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=cache.kannon92,resources=kueueoperators/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=cache.kannon92,resources=kueueoperators/finalizers,verbs=update
-//+kubebuilder:rbac:groups=core,resources=configmaps,verbs=get;list;create;update;patch;delete
+//+kubebuilder:rbac:groups=core,resources=configmaps,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=core,resources=services,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=core,resources=secrets,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=core,resources=serviceaccounts,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -76,79 +81,79 @@ func (r *KueueOperatorReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		return ctrl.Result{}, nil
 	}
 
-	// Reconcile differences of config maps
-	configMap, cfgMapErr := r.fetchConfigMap(ctx)
-	if cfgMapErr != nil {
-		return ctrl.Result{}, cfgMapErr
+	serviceList := service.BuildService(kueueOperator.Spec.Kueue.Namespace)
+
+	if err := r.createServices(ctx, serviceList); err != nil {
+		log.Error(err, "Kueue services unable to be created")
+		return ctrl.Result{}, err
 	}
-	if !configmap.IsConfigMapDifferentFromConfiguration(configMap, kueueOperator.Spec.Kueue) {
-		log.V(4).Info("Kueue config maps are the same. skipping")
-		return ctrl.Result{}, nil
-	}
-	// scale down kueue deployment
-	if downScaleErr := r.scaleDeployment(ctx, 0); downScaleErr != nil {
-		return ctrl.Result{}, downScaleErr
+
+	secret := secret.BuildSecret(kueueOperator.Spec.Kueue.Namespace)
+
+	if err := r.createSecret(ctx, secret); err != nil {
+		log.Error(err, "Kueue secrets unable to be created")
+		return ctrl.Result{}, err
 	}
 
 	// set new config map
-	newCfgMap := configmap.BuildConfigMap(&kueueOperator.Spec.Kueue.Config)
-	if cfgMapErr := r.updateConfigMap(ctx, newCfgMap); cfgMapErr != nil {
-		return ctrl.Result{}, cfgMapErr
+	newCfgMap, err := configmap.BuildConfigMap(kueueOperator.Spec.Kueue.Namespace, kueueOperator.Spec.Kueue.Config)
+	if err != nil {
+		return ctrl.Result{}, err
 	}
-	// scale up kueue deployment
-	if upScaleErr := r.scaleDeployment(ctx, 1); upScaleErr != nil {
-		return ctrl.Result{}, upScaleErr
+	if err := r.createConfigMap(ctx, newCfgMap); err != nil {
+		log.Error(err, "unable to create config map")
+		return ctrl.Result{}, err
+	}
+
+	deployment := deployment.BuildDeployment(kueueOperator.Spec.Kueue.Namespace, kueueOperator.Spec.Kueue.Image)
+
+	if err := r.createDeployment(ctx, deployment); err != nil {
+		log.Error(err, "Kueue deployment unable to be created")
+		return ctrl.Result{}, err
 	}
 
 	return ctrl.Result{}, nil
 }
 
-func (r *KueueOperatorReconciler) fetchConfigMap(ctx context.Context) (*corev1.ConfigMap, error) {
-	log := logr.FromContext(ctx)
-	configMap := &corev1.ConfigMap{}
-	configMapErr := r.Get(ctx, types.NamespacedName{Name: "kueue-manager-config", Namespace: r.kueueNamespace}, configMap)
-	if configMapErr != nil {
-		if errors.IsNotFound(configMapErr) {
-			log.Info("Kueue Config map not found. Ignoring")
-			return nil, nil
-		}
-		log.Error(configMapErr, "Failed to get config map from kueue")
-		return nil, configMapErr
-	}
-	return configMap, nil
+func (r *KueueOperatorReconciler) createConfigMap(ctx context.Context, cfgMap *corev1.ConfigMap) error {
+	return r.Create(ctx, cfgMap, &client.CreateOptions{})
 }
 
-func (r *KueueOperatorReconciler) updateConfigMap(ctx context.Context, newCfgMap *corev1.ConfigMap) error {
+func (r *KueueOperatorReconciler) createServices(ctx context.Context, serviceList []*corev1.Service) error {
 	log := logr.FromContext(ctx)
-	configMap := &corev1.ConfigMap{}
-	configMapErr := r.Get(ctx, types.NamespacedName{Name: "kueue-manager-config", Namespace: r.kueueNamespace}, configMap)
-	if configMapErr != nil {
-		if errors.IsNotFound(configMapErr) {
-			log.Info("Kueue Config map not found. Ignoring")
-			return nil
+	for _, val := range serviceList {
+		err := r.Get(ctx, types.NamespacedName{Namespace: val.Namespace, Name: val.Name}, val, &client.GetOptions{})
+		if errors.IsNotFound(err) {
+			if err := r.Create(ctx, val, &client.CreateOptions{}); err != nil {
+				log.Info("Unable to create service", "Service", val)
+				log.Error(err, "unable to create service")
+				return nil
+			}
 		}
-		log.Error(configMapErr, "Failed to get config map from kueue")
-		return configMapErr
 	}
-	configMap = newCfgMap
-	return r.Update(ctx, configMap, &client.UpdateOptions{})
+	return nil
 }
 
-func (r *KueueOperatorReconciler) scaleDeployment(ctx context.Context, replicas int32) error {
+func (r *KueueOperatorReconciler) createSecret(ctx context.Context, secret *corev1.Secret) error {
 	log := logr.FromContext(ctx)
-	deployment := &appsv1.Deployment{}
-	deploymentErr := r.Get(ctx, types.NamespacedName{Name: "kueue-controller-manager", Namespace: r.kueueNamespace}, deployment)
-	if deploymentErr != nil {
-		if errors.IsNotFound(deploymentErr) {
-			log.Info("Kueue Deployment not found. Ignoring")
-			return nil
+	err := r.Get(ctx, types.NamespacedName{Namespace: secret.Namespace, Name: secret.Name}, secret, &client.GetOptions{})
+	if errors.IsNotFound(err) {
+		if err := r.Create(ctx, secret, &client.CreateOptions{}); err != nil {
+			log.Error(err, "unable to create secret")
+			return err
 		}
-		log.Error(deploymentErr, "Failed to get deployment from kueue namespace")
-		return deploymentErr
 	}
-	deployment.Spec.Replicas = ptr.To(replicas)
-	if uErr := r.Update(ctx, deployment, &client.UpdateOptions{}); uErr != nil {
-		log.Error(uErr, "Unable to update deployment")
+	return nil
+}
+
+func (r *KueueOperatorReconciler) createDeployment(ctx context.Context, deployment *appsv1.Deployment) error {
+	log := logr.FromContext(ctx)
+	err := r.Get(ctx, types.NamespacedName{Namespace: deployment.Namespace, Name: deployment.Name}, deployment, &client.GetOptions{})
+	if errors.IsNotFound(err) {
+		if err := r.Create(ctx, deployment, &client.CreateOptions{}); err != nil {
+			log.Error(err, "unable to create deployment")
+			return err
+		}
 	}
 	return nil
 }
@@ -157,5 +162,9 @@ func (r *KueueOperatorReconciler) scaleDeployment(ctx context.Context, replicas 
 func (r *KueueOperatorReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&cachev1.KueueOperator{}).
+		Owns(&corev1.ServiceAccount{}).
+		Owns(&corev1.Secret{}).
+		Owns(&appsv1.Deployment{}).
+		Owns(&corev1.Service{}).
 		Complete(r)
 }

@@ -33,9 +33,20 @@ type KueueOperatorSpec struct {
 
 type Kueue struct {
 	// The namespace where kueue is deployed
-	KueueNamespace string `json:"kueueNamespace"`
+	Namespace string `json:"namespace"`
 	// The config that is persisted to a config map
-	Config configapi.Configuration `json:"config"`
+	Config KueueConfiguration `json:"config"`
+	// Image
+	Image string `json:"image"`
+}
+
+type KueueConfiguration struct {
+	// WaitForPodsReady configures gang admission
+	// optional
+	WaitForPodsReady *configapi.WaitForPodsReady `json:"waitForPodsReady,omitempty"`
+	// Integrations are the types of integrations Kueue will manager
+	// Required
+	Integrations configapi.Integrations `json:"integrations"`
 }
 
 // KueueOperatorStatus defines the observed state of KueueOperator

@@ -5,8 +5,12 @@ metadata:
     app.kubernetes.io/name: kueue-operator
     app.kubernetes.io/managed-by: kustomize
   name: kueueoperator-sample
-  namespace: jobset-system
+  namespace: kueue-operator
 spec:
-  jobSet:
-    jobSetImage: registry.k8s.io/jobset/jobset:v0.7.1
-    proxy: gcr.io/kubebuilder/kube-rbac-proxy:v0.13.1
+  kueue:
+    namespace: "kueue-operator"
+    image: "registry.k8s.io/kueue/kueue:v0.10.0"
+    config:
+      integrations:
+        frameworks:
+          - "batch/job" 

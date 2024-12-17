@@ -7,24 +7,9 @@ rules:
 - apiGroups:
   - ""
   resources:
-  - events
-  verbs:
-  - create
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - ""
-  resources:
-  - nodes
-  verbs:
-  - get
-  - list
-  - watch
-- apiGroups:
-  - ""
-  resources:
-  - pods
+  - configmaps
+  - secrets
+  - serviceaccounts
   - services
   verbs:
   - create
@@ -34,14 +19,6 @@ rules:
   - patch
   - update
   - watch
-- apiGroups:
-  - ""
-  resources:
-  - secrets
-  - serviceaccounts
-  verbs:
-  - create
-  - delete
 - apiGroups:
   - apps
   resources:
@@ -53,26 +30,7 @@ rules:
   - list
   - patch
   - update
-- apiGroups:
-  - batch
-  resources:
-  - jobs
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
   - watch
-- apiGroups:
-  - batch
-  resources:
-  - jobs/status
-  verbs:
-  - get
-  - patch
-  - update
 - apiGroups:
   - cache.kannon92
   resources:
@@ -95,32 +53,6 @@ rules:
   - cache.kannon92
   resources:
   - kueueoperators/status
-  verbs:
-  - get
-  - patch
-  - update
-- apiGroups:
-  - jobset.x-k8s.io
-  resources:
-  - jobsets
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - jobset.x-k8s.io
-  resources:
-  - jobsets/finalizers
-  verbs:
-  - update
-- apiGroups:
-  - jobset.x-k8s.io
-  resources:
-  - jobsets/status
   verbs:
   - get
   - patch
