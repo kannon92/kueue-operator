@@ -18,12 +18,14 @@ package controller
 
 import (
 	"context"
+	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/wait"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logr "sigs.k8s.io/controller-runtime/pkg/log"
@@ -112,11 +114,21 @@ func (r *KueueOperatorReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		return ctrl.Result{}, err
 	}
 
-	return ctrl.Result{}, nil
+	if err := r.waitForDeploymentReady(ctx, deployment, 5*time.Minute); err != nil {
+		log.Error(err, "Kueue deployment not ready")
+		return ctrl.Result{}, err
+	}
+	kueueOperator.Status.KueueReady = true
+	return ctrl.Result{}, r.Update(ctx, kueueOperator, &client.UpdateOptions{})
+
 }
 
 func (r *KueueOperatorReconciler) createConfigMap(ctx context.Context, cfgMap *corev1.ConfigMap) error {
-	return r.Create(ctx, cfgMap, &client.CreateOptions{})
+	err := r.Get(ctx, types.NamespacedName{Namespace: cfgMap.GetNamespace(), Name: cfgMap.GetName()}, cfgMap, &client.GetOptions{})
+	if errors.IsNotFound(err) {
+		return r.Create(ctx, cfgMap, &client.CreateOptions{})
+	}
+	return nil
 }
 
 func (r *KueueOperatorReconciler) createServices(ctx context.Context, serviceList []*corev1.Service) error {
@@ -156,6 +168,23 @@ func (r *KueueOperatorReconciler) createDeployment(ctx context.Context, deployme
 		}
 	}
 	return nil
+}
+
+func (r *KueueOperatorReconciler) waitForDeploymentReady(ctx context.Context, deployment *appsv1.Deployment, timeout time.Duration) error {
+	return wait.PollUntilContextCancel(ctx, timeout, true, func(ctx context.Context) (bool, error) {
+		tempDep := &appsv1.Deployment{}
+		err := r.Get(ctx, types.NamespacedName{Namespace: deployment.Namespace, Name: deployment.Name}, tempDep, &client.GetOptions{})
+		if err != nil {
+			return false, err
+		}
+
+		// Check if the deployment is ready
+		if deployment.Status.ReadyReplicas == *deployment.Spec.Replicas {
+			return true, nil
+		}
+
+		return false, nil
+	})
 }
 
 // SetupWithManager sets up the controller with the Manager.

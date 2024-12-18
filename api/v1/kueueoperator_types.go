@@ -51,7 +51,7 @@ type KueueConfiguration struct {
 
 // KueueOperatorStatus defines the observed state of KueueOperator
 type KueueOperatorStatus struct {
-	KueueVersion string `json:"kueueVersion"`
+	KueueReady bool `json:"kueueReady"`
 }
 
 //+kubebuilder:object:root=true

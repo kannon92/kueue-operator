@@ -282,10 +282,10 @@ spec:
           status:
             description: KueueOperatorStatus defines the observed state of KueueOperator
             properties:
-              kueueVersion:
-                type: string
+              kueueReady:
+                type: boolean
             required:
-            - kueueVersion
+            - kueueReady
             type: object
         type: object
     served: true
