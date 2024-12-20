@@ -47,6 +47,11 @@ spec:
                   config:
                     description: The config that is persisted to a config map
                     properties:
+                      featureGates:
+                        additionalProperties:
+                          type: boolean
+                        description: Feature gates are advanced features for Kueue
+                        type: object
                       integrations:
                         description: |-
                           Integrations are the types of integrations Kueue will manager
@@ -270,13 +275,9 @@ spec:
                   image:
                     description: Image
                     type: string
-                  namespace:
-                    description: The namespace where kueue is deployed
-                    type: string
                 required:
                 - config
                 - image
-                - namespace
                 type: object
             type: object
           status:

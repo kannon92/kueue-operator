@@ -83,14 +83,17 @@ func (r *KueueOperatorReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		return ctrl.Result{}, nil
 	}
 
-	serviceList := service.BuildService(kueueOperator.Spec.Kueue.Namespace)
+	// Right now we will assume operator and kueue must be installed in the same namespace.
+
+	namespace := kueueOperator.GetNamespace()
+	serviceList := service.BuildService(namespace)
 
 	if err := r.createServices(ctx, serviceList); err != nil {
 		log.Error(err, "Kueue services unable to be created")
 		return ctrl.Result{}, err
 	}
 
-	secret := secret.BuildSecret(kueueOperator.Spec.Kueue.Namespace)
+	secret := secret.BuildSecret(namespace)
 
 	if err := r.createSecret(ctx, secret); err != nil {
 		log.Error(err, "Kueue secrets unable to be created")
@@ -98,7 +101,7 @@ func (r *KueueOperatorReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	}
 
 	// set new config map
-	newCfgMap, err := configmap.BuildConfigMap(kueueOperator.Spec.Kueue.Namespace, kueueOperator.Spec.Kueue.Config)
+	newCfgMap, err := configmap.BuildConfigMap(namespace, kueueOperator.Spec.Kueue.Config)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
@@ -107,7 +110,7 @@ func (r *KueueOperatorReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		return ctrl.Result{}, err
 	}
 
-	deployment := deployment.BuildDeployment(kueueOperator.Spec.Kueue.Namespace, kueueOperator.Spec.Kueue.Image)
+	deployment := deployment.BuildDeployment(namespace, kueueOperator.Spec.Kueue.Image)
 
 	if err := r.createDeployment(ctx, deployment); err != nil {
 		log.Error(err, "Kueue deployment unable to be created")

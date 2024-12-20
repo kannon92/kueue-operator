@@ -8,7 +8,6 @@ metadata:
   namespace: kueue-operator
 spec:
   kueue:
-    namespace: "kueue-operator"
     image: "registry.k8s.io/kueue/kueue:v0.10.0"
     config:
       integrations:

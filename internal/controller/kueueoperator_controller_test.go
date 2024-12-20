@@ -49,7 +49,6 @@ var _ = Describe("KueueOperator Controller", func() {
 				},
 				Spec: cachev1.KueueOperatorSpec{
 					Kueue: &cachev1.Kueue{
-						Namespace: "openshift-kueue",
 						Config: cachev1.KueueConfiguration{
 							Integrations: v1beta1.Integrations{
 								Frameworks: []string{"batchv1.job"},

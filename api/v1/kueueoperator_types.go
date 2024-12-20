@@ -32,8 +32,6 @@ type KueueOperatorSpec struct {
 }
 
 type Kueue struct {
-	// The namespace where kueue is deployed
-	Namespace string `json:"namespace"`
 	// The config that is persisted to a config map
 	Config KueueConfiguration `json:"config"`
 	// Image
@@ -47,6 +45,8 @@ type KueueConfiguration struct {
 	// Integrations are the types of integrations Kueue will manager
 	// Required
 	Integrations configapi.Integrations `json:"integrations"`
+	// Feature gates are advanced features for Kueue
+	FeatureGates map[string]bool `json:"featureGates,omitempty"`
 }
 
 // KueueOperatorStatus defines the observed state of KueueOperator

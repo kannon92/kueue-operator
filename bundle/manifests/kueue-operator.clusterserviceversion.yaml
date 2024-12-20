@@ -4,7 +4,7 @@ metadata:
   annotations:
     alm-examples: '[]'
     capabilities: Basic Install
-    createdAt: "2024-11-25T17:29:22Z"
+    createdAt: "2024-12-20T13:53:02Z"
     operators.operatorframework.io/builder: operator-sdk-v1.37.0
     operators.operatorframework.io/project_layout: go.kubebuilder.io/v4
   name: kueue-operator.v0.0.1
@@ -22,9 +22,6 @@ spec:
     - kind: Cohort
       name: cohorts.kueue.x-k8s.io
       version: v1alpha1
-    - kind: JobSet
-      name: jobsets.jobset.x-k8s.io
-      version: v1alpha2
     - description: KueueOperator is the Schema for the kueueoperators API
       displayName: Kueue Operator
       kind: KueueOperator
@@ -75,6 +72,8 @@ spec:
         - apiGroups:
           - ""
           resources:
+          - limitranges
+          - namespaces
           - nodes
           verbs:
           - get
@@ -84,13 +83,36 @@ spec:
           - ""
           resources:
           - pods
-          - services
+          verbs:
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - ""
+          resources:
+          - pods/finalizers
+          verbs:
+          - get
+          - update
+        - apiGroups:
+          - ""
+          resources:
+          - pods/status
+          verbs:
+          - get
+          - patch
+        - apiGroups:
+          - ""
+          resources:
+          - podtemplates
           verbs:
           - create
           - delete
           - get
           - list
-          - patch
           - update
           - watch
         - apiGroups:
@@ -113,9 +135,18 @@ spec:
           - update
           - watch
         - apiGroups:
-          - batch
+          - admissionregistration.k8s.io
           resources:
-          - jobs
+          - validatingadmissionpolicies
+          - validatingadmissionpolicybindings
+          verbs:
+          - get
+          - list
+          - watch
+        - apiGroups:
+          - autoscaling.x-k8s.io
+          resources:
+          - provisioningrequests
           verbs:
           - create
           - delete
@@ -125,20 +156,49 @@ spec:
           - update
           - watch
         - apiGroups:
+          - autoscaling.x-k8s.io
+          resources:
+          - provisioningrequests/status
+          verbs:
+          - get
+        - apiGroups:
           - batch
           resources:
+          - jobs
+          verbs:
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - batch
+          resources:
+          - jobs/finalizers
           - jobs/status
           verbs:
           - get
           - patch
           - update
         - apiGroups:
+          - flowcontrol.apiserver.k8s.io
+          resources:
+          - flowschemas
+          - prioritylevelconfigurations
+          verbs:
+          - list
+          - watch
+        - apiGroups:
+          - flowcontrol.apiserver.k8s.io
+          resources:
+          - flowschemas/status
+          verbs:
+          - patch
+        - apiGroups:
           - jobset.x-k8s.io
           resources:
           - jobsets
           verbs:
-          - create
-          - delete
           - get
           - list
           - patch
@@ -149,6 +209,7 @@ spec:
           resources:
           - jobsets/finalizers
           verbs:
+          - get
           - update
         - apiGroups:
           - jobset.x-k8s.io
@@ -159,11 +220,154 @@ spec:
           - patch
           - update
         - apiGroups:
-          - ""
+          - kubeflow.org
           resources:
-          - events
+          - mpijobs
+          - mxjobs
+          - paddlejobs
+          - pytorchjobs
+          - tfjobs
+          - xgboostjobs
+          verbs:
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - kubeflow.org
+          resources:
+          - mpijobs/finalizers
+          - mxjobs/finalizers
+          - mxjobs/status
+          - paddlejobs/finalizers
+          - pytorchjobs/finalizers
+          - tfjobs/finalizers
+          - xgboostjobs/finalizers
+          verbs:
+          - get
+          - update
+        - apiGroups:
+          - kubeflow.org
+          resources:
+          - mpijobs/status
+          - paddlejobs/status
+          - pytorchjobs/status
+          - tfjobs/status
+          - xgboostjobs/status
+          verbs:
+          - get
+          - patch
+          - update
+        - apiGroups:
+          - kueue.x-k8s.io
+          resources:
+          - admissionchecks
+          - clusterqueues
+          - cohorts
+          - localqueues
+          - workloads
           verbs:
           - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - kueue.x-k8s.io
+          resources:
+          - admissionchecks/finalizers
+          - clusterqueues/finalizers
+          - localqueues/finalizers
+          - resourceflavors/finalizers
+          - workloads/finalizers
+          verbs:
+          - update
+        - apiGroups:
+          - kueue.x-k8s.io
+          resources:
+          - admissionchecks/status
+          - clusterqueues/status
+          - localqueues/status
+          - multikueueclusters/status
+          - workloads/status
+          verbs:
+          - get
+          - patch
+          - update
+        - apiGroups:
+          - kueue.x-k8s.io
+          resources:
+          - multikueueclusters
+          - multikueueconfigs
+          - provisioningrequestconfigs
+          - topologies
+          - workloadpriorityclasses
+          verbs:
+          - get
+          - list
+          - watch
+        - apiGroups:
+          - kueue.x-k8s.io
+          resources:
+          - resourceflavors
+          verbs:
+          - delete
+          - get
+          - list
+          - update
+          - watch
+        - apiGroups:
+          - node.k8s.io
+          resources:
+          - runtimeclasses
+          verbs:
+          - get
+          - list
+          - watch
+        - apiGroups:
+          - ray.io
+          resources:
+          - rayclusters
+          - rayjobs
+          verbs:
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - ray.io
+          resources:
+          - rayclusters/finalizers
+          - rayclusters/status
+          - rayjobs/finalizers
+          - rayjobs/status
+          verbs:
+          - get
+          - update
+        - apiGroups:
+          - scheduling.k8s.io
+          resources:
+          - priorityclasses
+          verbs:
+          - get
+          - list
+          - watch
+        - apiGroups:
+          - ""
+          resources:
+          - configmaps
+          - secrets
+          - serviceaccounts
+          - services
+          verbs:
+          - create
+          - delete
+          - get
+          - list
           - patch
           - update
           - watch
@@ -178,26 +382,7 @@ spec:
           - list
           - patch
           - update
-        - apiGroups:
-          - batch
-          resources:
-          - jobs
-          verbs:
-          - create
-          - delete
-          - get
-          - list
-          - patch
-          - update
           - watch
-        - apiGroups:
-          - batch
-          resources:
-          - jobs/status
-          verbs:
-          - get
-          - patch
-          - update
         - apiGroups:
           - cache.kannon92
           resources:
@@ -224,78 +409,10 @@ spec:
           - get
           - patch
           - update
-        - apiGroups:
-          - ""
-          resources:
-          - nodes
+        - nonResourceURLs:
+          - /metrics
           verbs:
           - get
-          - list
-          - watch
-        - apiGroups:
-          - ""
-          resources:
-          - pods
-          verbs:
-          - create
-          - delete
-          - get
-          - list
-          - patch
-          - update
-          - watch
-        - apiGroups:
-          - ""
-          resources:
-          - secrets
-          verbs:
-          - create
-          - delete
-        - apiGroups:
-          - ""
-          resources:
-          - serviceaccounts
-          verbs:
-          - create
-          - delete
-        - apiGroups:
-          - ""
-          resources:
-          - services
-          verbs:
-          - create
-          - delete
-          - get
-          - list
-          - patch
-          - update
-          - watch
-        - apiGroups:
-          - jobset.x-k8s.io
-          resources:
-          - jobsets
-          verbs:
-          - create
-          - delete
-          - get
-          - list
-          - patch
-          - update
-          - watch
-        - apiGroups:
-          - jobset.x-k8s.io
-          resources:
-          - jobsets/finalizers
-          verbs:
-          - update
-        - apiGroups:
-          - jobset.x-k8s.io
-          resources:
-          - jobsets/status
-          verbs:
-          - get
-          - patch
-          - update
         - apiGroups:
           - authentication.k8s.io
           resources:
@@ -330,31 +447,6 @@ spec:
             spec:
               containers:
               - args:
-                - --secure-listen-address=0.0.0.0:8443
-                - --upstream=http://127.0.0.1:8080/
-                - --logtostderr=true
-                - --v=0
-                image: gcr.io/kubebuilder/kube-rbac-proxy:v0.16.0
-                name: kube-rbac-proxy
-                ports:
-                - containerPort: 8443
-                  name: https
-                  protocol: TCP
-                resources:
-                  limits:
-                    cpu: 500m
-                    memory: 128Mi
-                  requests:
-                    cpu: 5m
-                    memory: 64Mi
-                securityContext:
-                  allowPrivilegeEscalation: false
-                  capabilities:
-                    drop:
-                    - ALL
-              - args:
-                - --health-probe-bind-address=:8081
-                - --metrics-bind-address=127.0.0.1:8080
                 - --leader-elect
                 command:
                 - /manager
@@ -391,37 +483,6 @@ spec:
               terminationGracePeriodSeconds: 10
       permissions:
       - rules:
-        - apiGroups:
-          - ""
-          resources:
-          - configmaps
-          verbs:
-          - get
-          - list
-          - watch
-          - create
-          - update
-          - patch
-          - delete
-        - apiGroups:
-          - coordination.k8s.io
-          resources:
-          - leases
-          verbs:
-          - get
-          - list
-          - watch
-          - create
-          - update
-          - patch
-          - delete
-        - apiGroups:
-          - ""
-          resources:
-          - events
-          verbs:
-          - create
-          - patch
         - apiGroups:
           - ""
           resources:
